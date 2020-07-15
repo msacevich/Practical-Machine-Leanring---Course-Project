@@ -1,0 +1,122 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Melissa Sacevich"
+date: "7/13/2020"
+output: html_document
+---
+
+## Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Loading and Processing  
+
+Load the R libraries required for analysis. 
+```{r, warning = FALSE, message = FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(corrplot)
+```
+
+Load the test and training dataset from the provided URL. 
+```{r}
+TrainData <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestData  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# download the datasets
+train_data <- read.csv(url(TrainData))
+test_data <- read.csv(url(TestData))
+dim(train_data)
+dim(test_data)
+```
+
+## Data Cleaning 
+
+Clean the data to get rid of observations with missing values and columns that do not contribute much to the accelerometer measurements. 
+
+```{r}
+#remove variables with missing values
+train_data<- train_data[, colSums(is.na(train_data)) == 0]
+test_data <- test_data[, colSums(is.na(test_data)) == 0]
+dim(train_data)
+dim(test_data)
+
+#remove identification variables (columns 1-7)
+train_data <- train_data[, -c(1:7)]
+test_data <- test_data[, -c(1:7)]
+dim(train_data)
+dim(test_data)
+```
+
+## Data Partitioning 
+Partition the Training dataset in 2 to create a Training set (70% of the data) for the modeling process and a Test set (with the remaining 30%) for the validations.
+
+```{r}
+set.seed(1234) 
+training <- createDataPartition(train_data$classe, p = 0.7, list = FALSE)
+train_data1 <- train_data[training, ]
+train_data2 <- train_data[-training, ]
+dim(train_data1)
+dim(train_data2)
+
+#remove variables with near zero variance
+NZV <- nearZeroVar(train_data1)
+train_data1 <- train_data1[, -NZV]
+train_data2  <- train_data2[, -NZV]
+dim(train_data1)
+dim(train_data2)
+```
+
+## Data Modeling
+
+Here we will test three methods to model the regressions: Random Forest, Decision Tree and Generalized Boosted Model. 
+
+### Random Forest
+```{r}
+#fitting the model with train data
+set.seed(12345)
+RandForest <- trainControl(method="cv", number=3, verboseIter=FALSE)
+trainRF <- train(classe ~ ., data=train_data1, method="rf", trControl=RandForest)
+trainRF$finalModel
+
+#prediction using partitioned test data
+predictRF <- predict(trainRF, newdata=train_data2)
+RF <- confusionMatrix(predictRF, train_data2$classe)
+RF
+```
+
+The random forest accuracy is 0.993.
+
+### Decision Trees
+
+```{r}
+#fitting the model with train data
+set.seed(12345)
+DecisionTree <- rpart(classe ~ ., data=train_data1, method="class")
+fancyRpartPlot(DecisionTree)
+
+#prediction using partitioned test data
+predictDT <- predict(DecisionTree, train_data2, type = "class")
+CM <- confusionMatrix(predictDT, train_data2$classe)
+CM
+```
+
+The decision tree accuracy is 0.7541.
+
+## Apply Selected Model to Test Data
+
+The accuracy for the Random Forest model was greater than the Decision Tree Model. Therefore, the Random Forest model will be applied to predict the 20 quiz results using the testing dataset. 
+
+```{r}
+results <- predict(trainRF, newdata=test_data)
+results
+```
+
+
+
